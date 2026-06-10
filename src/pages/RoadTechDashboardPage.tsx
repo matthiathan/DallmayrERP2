@@ -35,16 +35,19 @@ export default function RoadTechDashboardPage() {
       
       const { data, error } = await supabase
         .from('technician_routes')
+        .select('*')
         .eq('technician_id', profile.id)
-        .eq('date', todayDateStr);
+        .eq('route_date', todayDateStr);
 
       if (data && data.length > 0) {
         setRoute(data[0] as TechnicianRoute);
       } else {
-        // Fallback or find previous route as preview so tech never feels empty
+        // Fallback or find previous route as preview so tech never feels empty by checking route_date or date
         const { data: allRoutes } = await supabase
           .from('technician_routes')
-          .eq('technician_id', profile.id);
+          .select('*')
+          .eq('technician_id', profile.id)
+          .order('route_date', { ascending: false });
 
         if (allRoutes && allRoutes.length > 0) {
           setRoute(allRoutes[0] as TechnicianRoute);

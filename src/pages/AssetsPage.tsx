@@ -49,7 +49,7 @@ export default function AssetsPage() {
     setLoading(true);
     try {
       // Query assets
-      const { data: dbAssets } = await supabase.from('assets').select('*').order('name');
+      const { data: dbAssets } = await supabase.from('assets').select('*').order('name').limit(100);
       setAssets((dbAssets as Asset[]) || []);
 
       // Compile branches across regions to link correctly

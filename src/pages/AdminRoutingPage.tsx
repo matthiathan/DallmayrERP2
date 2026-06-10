@@ -101,18 +101,16 @@ export default function AdminRoutingPage() {
     }
   };
 
+  // Load Road Technicians on mount
   useEffect(() => {
-    async function initData() {
+    async function loadTechnicians() {
       try {
-        // Query correct regional branches
-        const tableName = `customers_${region}`;
-        const { data: dbBranches } = await supabase.from(tableName).select('*');
-        setBranches(dbBranches || []);
-
-        // Load Road Technicians only
-        const { data: dbUsers } = await supabase.from('user_roles').select('*');
-        if (dbUsers) {
-          const techs = dbUsers.filter((u: any) => u.role === 'road_technician');
+        const { data: techs, error } = await supabase
+          .from('user_roles')
+          .select('*')
+          .eq('role', 'road_technician');
+        if (error) throw error;
+        if (techs) {
           setTechnicians(techs as UserProfile[]);
           if (techs.length > 0 && !selectedTechId) {
             setSelectedTechId(techs[0].id);
@@ -120,13 +118,42 @@ export default function AdminRoutingPage() {
           }
         }
       } catch (err) {
-        console.error('Error loading route setup data:', err);
+        console.error('Error loading technicians:', err);
+      }
+    }
+    loadTechnicians();
+  }, []);
+
+  // Fetch regional branches reactively with live fuzzy search via ilike
+  useEffect(() => {
+    async function fetchBranches() {
+      try {
+        const tableName = `customers_${region}`;
+        let query = supabase.from(tableName).select('*');
+        
+        if (searchBranchQuery.trim()) {
+          const searchPattern = `%${searchBranchQuery.trim()}%`;
+          query = query.or(`name.ilike.${searchPattern},address.ilike.${searchPattern}`);
+        }
+        
+        const { data: dbBranches, error } = await query.limit(100);
+        if (error) throw error;
+        setBranches(dbBranches || []);
+      } catch (err) {
+        console.error('Error loading regional branches:', err);
       }
     }
 
-    initData();
+    const handler = setTimeout(() => {
+      fetchBranches();
+    }, 250);
+
+    return () => clearTimeout(handler);
+  }, [region, searchBranchQuery]);
+
+  useEffect(() => {
     fetchAllData();
-  }, [region]);
+  }, [routeDate, region]);
 
   useEffect(() => {
     fetchAllData();
@@ -399,7 +426,9 @@ export default function AdminRoutingPage() {
         }
       }
 
+      const routeId = existingRoute ? existingRoute.id : `route-${Math.random().toString(36).substr(2, 9)}`;
       const routePayload = {
+        id: routeId,
         technician_id: selectedTechId,
         route_date: routeDate,
         date: routeDate, // Backwards compatible columns helper
@@ -407,37 +436,16 @@ export default function AdminRoutingPage() {
         stops: compiledStops // Backwards compatible stops array
       };
 
-      if (existingRoute) {
-        // Run live update on existing itinerary stop-sequence
-        const { error: updateErr } = await supabase
-          .from('technician_routes')
-          .update(routePayload)
-          .eq('id', existingRoute.id);
-        
-        if (updateErr) {
-          queuePayload('UPDATE_ROUTE', 'technician_routes', existingRoute.id, routePayload);
-          showNotice('success', 'Timeline mismatch check! Route sequence updated and queued locally!');
-        } else {
-          showNotice('success', 'Technician Dispatch Itinerary updated & pushed successfully!');
-        }
-      } else {
-        // Run live insert of fresh daily routes
-        const newRouteId = `route-${Math.random().toString(36).substr(2, 9)}`;
-        const insertPayload = {
-          id: newRouteId,
-          ...routePayload
-        };
+      // Live Route Saving: UPSERT into public.technician_routes
+      const { error: upsertErr } = await supabase
+        .from('technician_routes')
+        .upsert(routePayload, { onConflict: 'id' });
 
-        const { error: insertErr } = await supabase
-          .from('technician_routes')
-          .insert(insertPayload);
-        
-        if (insertErr) {
-          queuePayload('UPDATE_ROUTE', 'technician_routes', newRouteId, insertPayload);
-          showNotice('success', 'Offline dispatch queue activated: Route compiling cached safely in framework!');
-        } else {
-          showNotice('success', 'Daily Route compiled & dispatched to Technician successfully!');
-        }
+      if (upsertErr) {
+        queuePayload('UPDATE_ROUTE', 'technician_routes', routeId, routePayload);
+        showNotice('success', 'Offline dispatch queue activated: Route compiling cached safely in framework!');
+      } else {
+        showNotice('success', 'Technician Dispatch Itinerary compiled & upserted successfully!');
       }
 
       // Reset sequence draft
@@ -459,10 +467,7 @@ export default function AdminRoutingPage() {
     setTimeout(() => setNotification(null), 6000);
   };
 
-  const filteredBranches = branches.filter(b => 
-    (b.name || '').toLowerCase().includes(searchBranchQuery.toLowerCase()) ||
-    (b.address || '').toLowerCase().includes(searchBranchQuery.toLowerCase())
-  );
+  const filteredBranches = branches;
 
   const resolveTechName = (techId?: string) => {
     if (!techId) return 'Unassigned';

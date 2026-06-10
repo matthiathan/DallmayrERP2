@@ -81,7 +81,23 @@ export default function WarehouseDashboardPage() {
     
     // Listen for custom mock storage transactions
     window.addEventListener('storage', loadTasks);
-    return () => window.removeEventListener('storage', loadTasks);
+
+    // Setup realtime subscription to public.tasks to keep UI in sync
+    const channel = supabase
+      .channel('tasks-warehouse-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        () => {
+          loadTasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('storage', loadTasks);
+      supabase.removeChannel(channel);
+    };
   }, [loadTasks]);
 
   // One-click Mark Complete workflow
