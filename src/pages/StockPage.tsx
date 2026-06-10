@@ -48,7 +48,7 @@ export default function StockPage() {
   const loadStock = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.from('stock_items').order('item_name');
+      const { data } = await supabase.from('stock_items').select('*').order('item_name');
       
       const loaded = ((data || []) as any[]).map(item => {
         // Map current_quantity if it exists on database, else quantity
@@ -203,9 +203,9 @@ export default function StockPage() {
 
   const filteredStock = stocks.filter(stock => {
     const matchesSearch = 
-      stock.item_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stock.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stock.warehouse_location.toLowerCase().includes(searchQuery.toLowerCase());
+      (stock.item_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (stock.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (stock.warehouse_location || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const isLow = (stock.current_quantity ?? stock.quantity) <= stock.min_stock_level;
     const matchesLowFilter = !onlyLowStock || isLow;

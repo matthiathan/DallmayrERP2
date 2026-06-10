@@ -49,15 +49,15 @@ export default function AssetsPage() {
     setLoading(true);
     try {
       // Query assets
-      const { data: dbAssets } = await supabase.from('assets').order('name');
+      const { data: dbAssets } = await supabase.from('assets').select('*').order('name');
       setAssets((dbAssets as Asset[]) || []);
 
       // Compile branches across regions to link correctly
       let allBranches: CustomerBranch[] = [];
       try {
-        const { data: kzn } = await supabase.from('customers_kzn');
-        const { data: jhb } = await supabase.from('customers_jhb');
-        const { data: cpt } = await supabase.from('customers_cpt');
+        const { data: kzn } = await supabase.from('customers_kzn').select('*');
+        const { data: jhb } = await supabase.from('customers_jhb').select('*');
+        const { data: cpt } = await supabase.from('customers_cpt').select('*');
         
         allBranches = [
           ...(kzn || []),
@@ -154,9 +154,9 @@ export default function AssetsPage() {
   // Filter list
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = 
-      asset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.serial_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asset.qr_code.toLowerCase().includes(searchQuery.toLowerCase());
+      (asset.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (asset.serial_number || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (asset.qr_code || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
 

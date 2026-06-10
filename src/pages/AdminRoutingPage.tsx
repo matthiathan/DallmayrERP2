@@ -106,11 +106,11 @@ export default function AdminRoutingPage() {
       try {
         // Query correct regional branches
         const tableName = `customers_${region}`;
-        const { data: dbBranches } = await supabase.from(tableName);
+        const { data: dbBranches } = await supabase.from(tableName).select('*');
         setBranches(dbBranches || []);
 
         // Load Road Technicians only
-        const { data: dbUsers } = await supabase.from('user_roles');
+        const { data: dbUsers } = await supabase.from('user_roles').select('*');
         if (dbUsers) {
           const techs = dbUsers.filter((u: any) => u.role === 'road_technician');
           setTechnicians(techs as UserProfile[]);
@@ -460,8 +460,8 @@ export default function AdminRoutingPage() {
   };
 
   const filteredBranches = branches.filter(b => 
-    b.name.toLowerCase().includes(searchBranchQuery.toLowerCase()) ||
-    b.address.toLowerCase().includes(searchBranchQuery.toLowerCase())
+    (b.name || '').toLowerCase().includes(searchBranchQuery.toLowerCase()) ||
+    (b.address || '').toLowerCase().includes(searchBranchQuery.toLowerCase())
   );
 
   const resolveTechName = (techId?: string) => {

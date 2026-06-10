@@ -7,29 +7,19 @@ export default function LoginPage() {
   const { signIn, error } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [customError, setCustomError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      setCustomError('Please type a valid staff email address');
+    if (!email || !password) {
+      setCustomError('Please type a valid staff email and secure password');
       return;
     }
     setLoading(true);
     setCustomError(null);
-    const success = await signIn(email.trim());
-    setLoading(false);
-    if (success) {
-      navigate('/');
-    }
-  };
-
-  const handleQuickLogin = async (staffEmail: string) => {
-    setLoading(true);
-    setCustomError(null);
-    setEmail(staffEmail);
-    const success = await signIn(staffEmail);
+    const success = await signIn(email.trim(), password);
     setLoading(false);
     if (success) {
       navigate('/');
@@ -87,6 +77,23 @@ export default function LoginPage() {
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5 pl-1">
+              Account Password
+            </label>
+            <div className="relative">
+              <Key className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl text-sm text-slate-200 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 transition-all font-medium"
+                id="login-password-input"
+              />
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -97,51 +104,6 @@ export default function LoginPage() {
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>
-
-        {/* Quick Demo Pre-allocated Users Area */}
-        <div className="mt-8 border-t border-slate-800/85 pt-6">
-          <p className="text-center text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-4">
-            Demographic Test Access
-          </p>
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('admin@dallmayr.com')}
-              className="p-3 text-left rounded-xl bg-slate-955 hover:bg-slate-800 border border-slate-800 text-xs transition-all cursor-pointer shadow-sm group"
-              id="quick-login-admin"
-            >
-              <span className="block font-bold text-slate-200 group-hover:text-amber-500 transition-colors">Alice Admin</span>
-              <span className="text-[10px] text-slate-400">admin@dallmayr.com</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('manager@dallmayr.com')}
-              className="p-3 text-left rounded-xl bg-slate-955 hover:bg-slate-800 border border-slate-800 text-xs transition-all cursor-pointer shadow-sm group"
-              id="quick-login-manager"
-            >
-              <span className="block font-bold text-slate-200 group-hover:text-amber-500 transition-colors">Diana Router</span>
-              <span className="text-[10px] text-slate-400">manager@dallmayr.com</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('tech@dallmayr.com')}
-              className="p-3 text-left rounded-xl bg-slate-955 hover:bg-slate-800 border border-slate-800 text-xs transition-all cursor-pointer shadow-sm group"
-              id="quick-login-tech"
-            >
-              <span className="block font-bold text-slate-200 group-hover:text-amber-500 transition-colors">Bob Technician</span>
-              <span className="text-[10px] text-slate-400">tech@dallmayr.com</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('warehouse@dallmayr.com')}
-              className="p-3 text-left rounded-xl bg-slate-955 hover:bg-slate-800 border border-slate-800 text-xs transition-all cursor-pointer shadow-sm group"
-              id="quick-login-warehouse"
-            >
-              <span className="block font-bold text-slate-200 group-hover:text-amber-500 transition-colors">Charlie Staff</span>
-              <span className="text-[10px] text-slate-400">warehouse@dallmayr.com</span>
-            </button>
-          </div>
-        </div>
 
       </div>
     </div>

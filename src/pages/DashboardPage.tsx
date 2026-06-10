@@ -34,19 +34,19 @@ export default function DashboardPage() {
     async function loadStats() {
       setLoading(true);
       try {
-        const { data: assets } = await supabase.from('assets');
-        const { data: stocks } = await supabase.from('stocks');
-        const { data: tasks } = await supabase.from('tasks');
-        const { data: users } = await supabase.from('user_roles');
+        const { data: assets } = await supabase.from('assets').select('*');
+        const { data: stocks } = await supabase.from('stocks').select('*');
+        const { data: tasks } = await supabase.from('tasks').select('*');
+        const { data: users } = await supabase.from('user_roles').select('*');
         
         let kznCount = 0;
         let jhbCount = 0;
         let cptCount = 0;
         
         try {
-          const { data: kzn } = await supabase.from('customers_kzn');
-          const { data: jhb } = await supabase.from('customers_jhb');
-          const { data: cpt } = await supabase.from('customers_cpt');
+          const { data: kzn } = await supabase.from('customers_kzn').select('*');
+          const { data: jhb } = await supabase.from('customers_jhb').select('*');
+          const { data: cpt } = await supabase.from('customers_cpt').select('*');
           kznCount = kzn?.length || 3;
           jhbCount = jhb?.length || 3;
           cptCount = cpt?.length || 3;

@@ -6,6 +6,10 @@ const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
 // Check if we have real credentials
+// NOTE TO DEVELOPER: To transition from mock database mode to real Supabase database mode,
+// please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your deployment environment. 
+// You must also create the corresponding users within the live Supabase Authentication portal (with real passwords)
+// and map their assigned UUIDs inside the public.user_roles database table to correctly synchronize user access.
 const hasRealCredentials =
   supabaseUrl &&
   supabaseUrl !== 'YOUR_SUPABASE_URL' &&
@@ -312,13 +316,13 @@ export const supabase: any = {
       return { data: { user: null }, error: null };
     },
 
-    async signInWithPassword({ email }: { email: string; password?: string }) {
+    async signInWithPassword({ email, password }: { email: string; password?: string }) {
       if (!isMock && realSupabase) {
-        return realSupabase.auth.signInWithPassword({ email, password: arguments[0].password || '' });
+        return realSupabase.auth.signInWithPassword({ email, password: password || '' });
       }
 
       const db = getMockData();
-      const matched = db.user_roles.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const matched = db.user_roles.find(u => u.email && u.email.toLowerCase() === (email || '').toLowerCase());
 
       if (matched) {
         const userPayload = {
@@ -352,7 +356,7 @@ export const supabase: any = {
       }
 
       const db = getMockData();
-      const exists = db.user_roles.some(u => u.email.toLowerCase() === email.toLowerCase());
+      const exists = db.user_roles.some(u => u.email && u.email.toLowerCase() === (email || '').toLowerCase());
       if (exists) return { data: null, error: new Error('User already exists') };
 
       const newId = `user-${Math.random().toString(36).substr(2, 9)}`;

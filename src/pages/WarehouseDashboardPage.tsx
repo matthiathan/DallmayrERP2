@@ -35,7 +35,7 @@ export default function WarehouseDashboardPage() {
     setLoading(true);
     try {
       // Load all profiles to resolve names
-      const { data: dbProfiles } = await supabase.from('user_roles');
+      const { data: dbProfiles } = await supabase.from('user_roles').select('*');
       const staffMap: { [id: string]: string } = {};
       if (dbProfiles) {
         dbProfiles.forEach((p: any) => {
@@ -47,6 +47,7 @@ export default function WarehouseDashboardPage() {
       // Load pending tasks
       const { data, error } = await supabase
         .from('tasks')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (data) {

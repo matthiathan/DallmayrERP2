@@ -7,7 +7,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   error: string | null;
-  signIn: (email: string) => Promise<boolean>;
+  signIn: (email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   simulateRoleChange: (role: UserProfile['role']) => void; // Extremely useful helper for immediate, effortless demoing/testing
 }
@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error: profileErr } = await supabase
         .from('user_roles')
+        .select('*')
         .eq('id', userId)
         .single();
 
@@ -64,11 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkUserSession();
   }, [checkUserSession]);
 
-  const signIn = async (email: string): Promise<boolean> => {
+  const signIn = async (email: string, password: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: signErr } = await supabase.auth.signInWithPassword({ email });
+      const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password });
       if (signErr) {
         setError(signErr.message);
         setLoading(false);

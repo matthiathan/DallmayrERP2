@@ -55,7 +55,7 @@ export default function VerifiedClosureModal({ isOpen, onClose, stop, onSuccess 
     async function loadTask() {
       setLoading(true);
       try {
-        const { data } = await supabase.from('tasks').eq('id', stop!.task_id).single();
+        const { data } = await supabase.from('tasks').select('*').eq('id', stop!.task_id).single();
         if (data) {
           setTaskData(data as Task);
         } else {
@@ -297,7 +297,7 @@ export default function VerifiedClosureModal({ isOpen, onClose, stop, onSuccess 
       // Also update parent stop status inside tech routes
       let databaseStops: RouteStop[] = [];
       try {
-        const { data: routeSearch } = await supabase.from('technician_routes').eq('technician_id', 'user-tech-uuid'); // or query route directly
+        const { data: routeSearch } = await supabase.from('technician_routes').select('*').eq('technician_id', 'user-tech-uuid'); // or query route directly
         if (routeSearch && routeSearch.length > 0) {
           const matchedRoute = routeSearch[0];
           databaseStops = (matchedRoute.stops || []).map((s: any) => {

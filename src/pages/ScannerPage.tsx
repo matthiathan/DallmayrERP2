@@ -39,6 +39,7 @@ export default function ScannerPage() {
       try {
         const { data, error } = await supabase
           .from('assets')
+          .select('*')
           .eq('qr_code', code.trim().toUpperCase());
 
         if (data && data.length > 0) {
@@ -50,7 +51,7 @@ export default function ScannerPage() {
           try {
             const regions: Array<'kzn' | 'jhb' | 'cpt'> = ['kzn', 'jhb', 'cpt'];
             for (const r of regions) {
-              const { data: b } = await supabase.from(`customers_${r}`).eq('id', assetMatch.branch_id);
+              const { data: b } = await supabase.from(`customers_${r}`).select('*').eq('id', assetMatch.branch_id);
               if (b && b.length > 0) {
                 branchFind = b[0] as CustomerBranch;
                 break;

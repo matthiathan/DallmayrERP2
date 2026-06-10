@@ -37,7 +37,7 @@ export default function UserAdminPage() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.from('user_roles').order('name');
+      const { data } = await supabase.from('user_roles').select('*').order('name');
       setUsers((data as UserProfile[]) || []);
     } catch (e) {
       console.error(e);
@@ -61,7 +61,7 @@ export default function UserAdminPage() {
     if (!newUser.email.trim()) errors.email = 'Staff Email is required.';
     if (!newUser.name.trim()) errors.name = 'Staff Name is required.';
 
-    const emailExists = users.some(u => u.email.toLowerCase() === newUser.email.trim().toLowerCase());
+    const emailExists = users.some(u => u.email && u.email.toLowerCase() === newUser.email.trim().toLowerCase());
     if (emailExists) {
       errors.email = 'This email already maps to a system role.';
     }
