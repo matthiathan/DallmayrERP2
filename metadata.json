@@ -1,0 +1,6 @@
+{
+  "name": "StockSystem",
+  "description": "Enterprise Field Service and Stock Management ERP for asset tracking, routing, and dynamic stock operations.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
