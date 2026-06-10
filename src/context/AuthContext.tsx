@@ -28,19 +28,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (profileErr || !data) {
-        // Fallback or setup dynamic profile if not fully configured on real Supabase
-        const fallbackProfile: UserProfile = {
-          id: userId,
-          role: 'road_technician', // default role
-          email: email,
-          name: email.split('@')[0]
-        };
-        setProfile(fallbackProfile);
+        console.error('Unauthorized: No operational user mapping found inside user_roles:', profileErr);
+        setError('Accreditation Required: No matching role mapping found in user_roles. Please contact an Administrator.');
+        setProfile(null);
       } else {
         setProfile(data as UserProfile);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching role profiling:', err);
+      setError(err?.message || 'Failed to authenticate user role routing context.');
+      setProfile(null);
     }
   }, []);
 
@@ -105,13 +102,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Immediate role switcher for evaluating the different views (Road Tech, Warehouse, Logistics Admin, or Settings Router)
-  const simulateRoleChange = (role: UserProfile['role']) => {
+  // Immediate role switcher for evaluating the different views (Road Tech, Warehouse, Logistics Admin, etc.)
+  const simulateRoleChange = async (role: UserProfile['role']) => {
     if (!profile) return;
     const updatedProfile = { ...profile, role };
     setProfile(updatedProfile);
 
-    // Save mock user roles to synchronize back on Mock db local instance
+    // Save user roles to synchronize back on database instances
     try {
       const stored = localStorage.getItem('dallmayr_mock_db');
       if (stored) {
@@ -123,6 +120,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           db.user_roles = userRoles;
           localStorage.setItem('dallmayr_mock_db', JSON.stringify(db));
         }
+      }
+
+      // Also persist to real Supabase if it's active so previewing works bidirectionally
+      const { data, error } = await supabase
+        .from('user_roles')
+        .update({ role })
+        .eq('id', profile.id);
+      
+      if (error) {
+        console.warn('Real Supabase update skipped or failed (common if not using real credentials):', error.message);
       }
     } catch (e) {
       console.error(e);

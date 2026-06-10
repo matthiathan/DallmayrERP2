@@ -81,7 +81,37 @@ const DEFAULTS = {
     { id: 'st-04', item_name: 'Heavy-Duty Brass Pressure Valve 1.5 Bar', sku: 'PRT-VALV-15', quantity: 8, warehouse_location: 'B-04-C', min_stock_level: 10 }, // low stock
     { id: 'st-05', item_name: 'Organic Descaling Powder (Tabs x50)', sku: 'CLN-DSC-50', quantity: 95, warehouse_location: 'C-01-A', min_stock_level: 20 },
     { id: 'st-06', item_name: 'Bio Milk System Frother Cleaner (1L)', sku: 'CLN-MLK-01', quantity: 42, warehouse_location: 'C-02-B', min_stock_level: 15 }
-  ] as StockItem[]
+  ] as StockItem[],
+
+  locations: [
+    { id: 'loc-01', name: 'Johannesburg Corporate Branch', address: '150 West St, Sandton, Johannesburg' },
+    { id: 'loc-02', name: 'Waterfront Dallmayr Lounge', address: 'Breakwater Blvd, V&A Waterfront, Cape Town' },
+    { id: 'loc-03', name: 'Durban Beachfront Depot', address: '12 Marine Parade, Durban' },
+    { id: 'loc-04', name: 'Central Spares Warehouse JHB', address: 'Industrial Area Phase II, Johannesburg' }
+  ],
+
+  stock_items: [
+    { id: 'st-01', item_name: 'Dallmayr Crema d’Oro Beans (1kg)', sku: 'COF-CRM-01', quantity: 240, current_quantity: 240, warehouse_location: 'A-12-B', min_stock_level: 50 },
+    { id: 'st-02', item_name: 'Dallmayr Prodomo Ground (500g)', sku: 'COF-PRD-02', quantity: 180, current_quantity: 180, warehouse_location: 'A-14-D', min_stock_level: 40 },
+    { id: 'st-03', item_name: 'Silicon O-Ring Seal 42mm', sku: 'PRT-OR-42', quantity: 14, current_quantity: 14, warehouse_location: 'B-02-A', min_stock_level: 25 },
+    { id: 'st-04', item_name: 'Heavy-Duty Brass Pressure Valve 1.5 Bar', sku: 'PRT-VALV-15', quantity: 8, current_quantity: 8, warehouse_location: 'B-04-C', min_stock_level: 10 },
+    { id: 'st-05', item_name: 'Organic Descaling Powder (Tabs x50)', sku: 'CLN-DSC-50', quantity: 95, current_quantity: 95, warehouse_location: 'C-01-A', min_stock_level: 20 },
+    { id: 'st-06', item_name: 'Bio Milk System Frother Cleaner (1L)', sku: 'CLN-MLK-01', quantity: 42, current_quantity: 42, warehouse_location: 'C-02-B', min_stock_level: 15 }
+  ],
+
+  stock_transactions: [] as any[],
+  asset_movements: [] as any[],
+
+  tickets: [
+    { id: 't-01', customer_id: 'jhb-01', customer_name: 'Sandton Corporate Office', address: '150 West St, Sandton, Johannesburg', region: 'jhb', issue_description: 'Grinder is making a high-pitched squealing sound. No espresso coming out.', status: 'open', priority: 'high', created_at: new Date(Date.now() - 36000000).toISOString() },
+    { id: 't-02', customer_id: 'jhb-02', customer_name: 'Roserose Coffee Lounge', address: 'Craddock Ave, Rosebank', region: 'jhb', issue_description: 'Grouphead water dispenser gasket leak during brewing.', status: 'open', priority: 'medium', created_at: new Date(Date.now() - 72000000).toISOString() },
+    { id: 't-03', customer_id: 'cpt-01', customer_name: 'Waterfront Dallmayr Lounge', address: 'Breakwater Blvd, V&A Waterfront, Cape Town', region: 'cpt', issue_description: 'Automatic descaling cycle keeps requesting to repeat. Blocked valve alert.', status: 'open', priority: 'high', created_at: new Date(Date.now() - 18000000).toISOString() },
+    { id: 't-04', customer_id: 'kzn-01', customer_name: 'Durban Beachfront Cafe', address: '12 Marine Parade, Durban', region: 'kzn', issue_description: 'Milk frothing system fails to draw steam. Needs frother head check.', status: 'open', priority: 'low', created_at: new Date(Date.now() - 86400000).toISOString() }
+  ] as any[],
+
+  scheduled_call_logs: [
+    { id: 'sc-01', ticket_id: 't-01', customer_id: 'jhb-01', customer_name: 'Sandton Corporate Office', address: '150 West St, Sandton, Johannesburg', region: 'jhb', scheduled_date: new Date().toLocaleDateString('en-CA'), notes: 'Schedule for immediate gasket reset and calibration.', assigned_to: 'user-tech-uuid', status: 'pending', created_at: new Date().toISOString() }
+  ] as any[]
 };
 
 // Local storage helpers

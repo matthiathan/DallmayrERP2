@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'manager' | 'warehouse_staff' | 'road_technician';
+export type UserRole = 'admin' | 'manager' | 'warehouse_staff' | 'road_technician' | 'inhouse_tech';
 
 export interface UserProfile {
   id: string;
@@ -25,7 +25,24 @@ export interface Asset {
   category: string;
   status: 'active' | 'maintenance' | 'retired';
   branch_id: string; // references CustomerBranch.id
+  location_id?: string; // references Location.id
   last_serviced_at: string;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  address: string;
+}
+
+export interface AssetMovement {
+  id: string;
+  asset_id: string;
+  from_location_id: string;
+  to_location_id: string;
+  moved_by: string;
+  moved_at: string;
+  notes?: string;
 }
 
 export interface RouteStop {
@@ -65,9 +82,20 @@ export interface StockItem {
   id: string;
   item_name: string;
   sku: string;
-  quantity: number;
+  quantity: number; // For backward compatibility with some existing mock bindings
+  current_quantity?: number; // Corresponding to the physical DB field from public.stock_items
   warehouse_location: string;
   min_stock_level: number;
+}
+
+export interface StockTransaction {
+  id: string;
+  stock_item_id: string;
+  type: 'in' | 'out' | 'adjustment';
+  quantity_changed: number;
+  performed_by: string;
+  created_at: string;
+  notes?: string;
 }
 
 export interface SyncPayload {

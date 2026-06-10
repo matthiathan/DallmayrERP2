@@ -10,9 +10,11 @@ import DashboardPage from './pages/DashboardPage';
 import RoadTechDashboardPage from './pages/RoadTechDashboardPage';
 import WarehouseDashboardPage from './pages/WarehouseDashboardPage';
 import AssetsPage from './pages/AssetsPage';
+import AssetDetailPage from './pages/AssetDetailPage';
 import StockPage from './pages/StockPage';
 import ScannerPage from './pages/ScannerPage';
 import AdminRoutingPage from './pages/AdminRoutingPage';
+import IntegrityPage from './pages/IntegrityPage';
 import UserAdminPage from './pages/UserAdminPage';
 
 export default function App() {
@@ -39,7 +41,7 @@ export default function App() {
             <Route 
               path="road-tech" 
               element={
-                <ProtectedRoute allowedRoles={['admin', 'road_technician']}>
+                <ProtectedRoute allowedRoles={['road_technician']}>
                   <RoadTechDashboardPage />
                 </ProtectedRoute>
               } 
@@ -57,6 +59,7 @@ export default function App() {
 
             {/* Shared assets directory */}
             <Route path="assets" element={<AssetsPage />} />
+            <Route path="assets/:id" element={<AssetDetailPage />} />
 
             {/* Dynamic stock levels inventory */}
             <Route path="stock" element={<StockPage />} />
@@ -70,6 +73,26 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['admin', 'manager']}>
                   <AdminRoutingPage />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Direct Logistics Routing Alias */}
+            <Route 
+              path="routing" 
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                  <AdminRoutingPage />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Live Data Integrity Compliance Check */}
+            <Route 
+              path="integrity" 
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                  <IntegrityPage />
                 </ProtectedRoute>
               } 
             />

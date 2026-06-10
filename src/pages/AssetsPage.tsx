@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -274,11 +275,14 @@ export default function AssetsPage() {
                 <p className="font-bold text-slate-700 truncate">{getBranchName(asset.branch_id)}</p>
               </div>
 
-              {/* Footer qr tracking key */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] font-semibold text-slate-500">
-                <span className="flex items-center gap-1 text-[10px] text-slate-400 font-medium lowercase">
-                  <QrCode className="h-3.5 w-3.5 text-slate-400 shrink-0" /> validation qr:
-                </span>
+                <Link 
+                  to={`/assets/${asset.id}`} 
+                  className="text-amber-600 hover:text-amber-700 font-bold text-[10px] uppercase tracking-wider flex items-center gap-0.5"
+                  id={`view-asset-link-${asset.id}`}
+                >
+                  Specs & moves →
+                </Link>
                 <span className="bg-slate-100 px-2 py-0.5 rounded font-mono font-bold text-indigo-700 uppercase">
                   {asset.qr_code}
                 </span>
