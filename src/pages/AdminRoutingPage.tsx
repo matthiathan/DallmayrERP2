@@ -39,6 +39,7 @@ export default function AdminRoutingPage() {
   const [region, setRegion] = useState<'kzn' | 'jhb' | 'cpt'>('jhb');
   const [branches, setBranches] = useState<CustomerBranch[]>([]);
   const [searchBranchQuery, setSearchBranchQuery] = useState<string>('');
+  const [searchingCustomers, setSearchingCustomers] = useState<boolean>(false);
   
   // Asset lookup in compiler
   const [searchAssetQuery, setSearchAssetQuery] = useState<string>('');
@@ -60,6 +61,14 @@ export default function AdminRoutingPage() {
   const [ticketIssue, setTicketIssue] = useState<string>('');
   const [ticketPriority, setTicketPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [creatingTicket, setCreatingTicket] = useState<boolean>(false);
+
+  // New unified ticket states
+  const [ticketAssetQuery, setTicketAssetQuery] = useState<string>('');
+  const [ticketMatchedAsset, setTicketMatchedAsset] = useState<Asset | null>(null);
+  const [ticketAssetLookupError, setTicketAssetLookupError] = useState<string | null>(null);
+  const [ticketAssetLoading, setTicketAssetLoading] = useState<boolean>(false);
+  const [ticketAssignedTechId, setTicketAssignedTechId] = useState<string>('');
+  const [ticketScheduledDate, setTicketScheduledDate] = useState<string>(new Date().toLocaleDateString('en-CA'));
 
   // Call scheduling state
   const [ticketToSchedule, setTicketToSchedule] = useState<any | null>(null);
@@ -105,51 +114,166 @@ export default function AdminRoutingPage() {
   useEffect(() => {
     async function loadTechnicians() {
       try {
+        // Fetching from user_roles. Note: ensure your RLS policy allows read access to this table.
         const { data: techs, error } = await supabase
           .from('user_roles')
-          .select('*')
+          .select('id, email, full_name, role')
           .eq('role', 'road_technician');
-        if (error) throw error;
+
+        if (error) {
+          console.error('Supabase Tech Fetch Error:', error);
+          return;
+        }
+
         if (techs) {
-          setTechnicians(techs as UserProfile[]);
-          if (techs.length > 0 && !selectedTechId) {
-            setSelectedTechId(techs[0].id);
-            setScheduleAssignee(techs[0].id);
+          // Map full_name to name for your UI to render
+          const formattedTechs = techs.map(t => ({
+            ...t,
+            name: t.full_name || t.email // Fallback to email if name is null
+          }));
+          setTechnicians(formattedTechs as UserProfile[]);
+          
+          if (formattedTechs.length > 0 && !selectedTechId) {
+            setSelectedTechId(formattedTechs[0].id);
+            setScheduleAssignee(formattedTechs[0].id);
           }
         }
       } catch (err) {
-        console.error('Error loading technicians:', err);
+        console.error('Critical error loading technicians:', err);
       }
     }
     loadTechnicians();
   }, []);
 
-  // Fetch regional branches reactively with live fuzzy search via ilike
-  useEffect(() => {
-    async function fetchBranches() {
-      try {
-        const tableName = `customers_${region}`;
-        let query = supabase.from(tableName).select('*');
-        
-        if (searchBranchQuery.trim()) {
-          const searchPattern = `%${searchBranchQuery.trim()}%`;
-          query = query.or(`name.ilike.${searchPattern},address.ilike.${searchPattern}`);
-        }
-        
-        const { data: dbBranches, error } = await query.limit(100);
-        if (error) throw error;
-        setBranches(dbBranches || []);
-      } catch (err) {
-        console.error('Error loading regional branches:', err);
+  // Fetch regional branches reactively with live fuzzy search via concurrent multi-table Promise.all
+  const searchLiveCustomers = async (searchTerm: string) => {
+    setSearchingCustomers(true);
+    try {
+      const term = searchTerm.trim();
+      
+      const queryKzn = supabase.from('customers_kzn').select('*');
+      const queryJhb = supabase.from('customers_jhb').select('*');
+      const queryCpt = supabase.from('customers_cpt').select('*');
+
+      if (term) {
+        // Precise Column Targeting with double quotes wrapping spaced column identifiers
+        // Search must filter using .or() looking for matches in either A/C Code or Customer Name
+        const filterStr = `"Customer Name".ilike.%${term}%,"A/C Code".ilike.%${term}%`;
+        queryKzn.or(filterStr);
+        queryJhb.or(filterStr);
+        queryCpt.or(filterStr);
+      } else {
+        // If query is empty, pre-fetch default records to make initial directory exploration smooth
+        queryKzn.limit(30);
+        queryJhb.limit(30);
+        queryCpt.limit(30);
       }
+
+      // Simultaneously execute queries concurrently using Promise.all to prevent UI blockages
+      const [kznRes, jhbRes, cptRes] = await Promise.all([
+        queryKzn,
+        queryJhb,
+        queryCpt
+      ]);
+
+      let anyError = false;
+
+      // Aggressive Error Checking and detailed browser console logs for tracking RLS and network issues
+      if (kznRes.error) {
+        console.error('[Supabase Fetch Error - KZN Customers]:', {
+          code: kznRes.error.code,
+          message: kznRes.error.message,
+          details: kznRes.error.details,
+          hint: kznRes.error.hint
+        });
+        anyError = true;
+      }
+
+      if (jhbRes.error) {
+        console.error('[Supabase Fetch Error - JHB Customers]:', {
+          code: jhbRes.error.code,
+          message: jhbRes.error.message,
+          details: jhbRes.error.details,
+          hint: jhbRes.error.hint
+        });
+        anyError = true;
+      }
+
+      if (cptRes.error) {
+        console.error('[Supabase Fetch Error - CPT Customers]:', {
+          code: cptRes.error.code,
+          message: cptRes.error.message,
+          details: cptRes.error.details,
+          hint: cptRes.error.hint
+        });
+        anyError = true;
+      }
+
+      if (anyError) {
+        showNotice('error', 'Database connection failed or Access Denied. Check console for details.');
+      }
+
+      // Map databases' spaces/casing to allow both standardized interfaces and exact property access rendering
+      const kznData = (kznRes.data || []).map((row: any) => ({
+        ...row,
+        id: row["A/C Code"] || row.id || `kzn-${Math.random().toString(36).substr(2, 5)}`,
+        name: row["Customer Name"] || row.name || 'Unknown',
+        address: row["Current Location"] || row.address || 'Unknown Address',
+        latitude: row.latitude || row["Latitude"] || -29.8512,
+        longitude: row.longitude || row["Longitude"] || 31.0392,
+        contact_number: row.contact_number || row["Contact Number"] || '',
+        region: 'KZN',
+        "Customer Name": row["Customer Name"] || row.name || 'Unknown',
+        "A/C Code": row["A/C Code"] || row.id || 'Unknown Code',
+        "Current Location": row["Current Location"] || row.address || 'Unknown Address'
+      }));
+
+      const jhbData = (jhbRes.data || []).map((row: any) => ({
+        ...row,
+        id: row["A/C Code"] || row.id || `jhb-${Math.random().toString(36).substr(2, 5)}`,
+        name: row["Customer Name"] || row.name || 'Unknown',
+        address: row["Current Location"] || row.address || 'Unknown Address',
+        latitude: row.latitude || row["Latitude"] || -26.1032,
+        longitude: row.longitude || row["Longitude"] || 28.0561,
+        contact_number: row.contact_number || row["Contact Number"] || '',
+        region: 'JHB',
+        "Customer Name": row["Customer Name"] || row.name || 'Unknown',
+        "A/C Code": row["A/C Code"] || row.id || 'Unknown Code',
+        "Current Location": row["Current Location"] || row.address || 'Unknown Address'
+      }));
+
+      const cptData = (cptRes.data || []).map((row: any) => ({
+        ...row,
+        id: row["A/C Code"] || row.id || `cpt-${Math.random().toString(36).substr(2, 5)}`,
+        name: row["Customer Name"] || row.name || 'Unknown',
+        address: row["Current Location"] || row.address || 'Unknown Address',
+        latitude: row.latitude || row["Latitude"] || -33.9036,
+        longitude: row.longitude || row["Longitude"] || 18.4211,
+        contact_number: row.contact_number || row["Contact Number"] || '',
+        region: 'CPT',
+        "Customer Name": row["Customer Name"] || row.name || 'Unknown',
+        "A/C Code": row["A/C Code"] || row.id || 'Unknown Code',
+        "Current Location": row["Current Location"] || row.address || 'Unknown Address'
+      }));
+
+      const combined = [...kznData, ...jhbData, ...cptData];
+      setBranches(combined);
+    } catch (err: any) {
+      console.error('[searchLiveCustomers Critical Error]:', err);
+      showNotice('error', `Database error: ${err.message || err}`);
+    } finally {
+      setSearchingCustomers(false);
     }
+  };
 
-    const handler = setTimeout(() => {
-      fetchBranches();
-    }, 250);
+  // Wire search live customers hook with 400ms debounce
+  useEffect(() => {
+    const delayDebouncer = setTimeout(() => {
+      searchLiveCustomers(searchBranchQuery);
+    }, 400);
 
-    return () => clearTimeout(handler);
-  }, [region, searchBranchQuery]);
+    return () => clearTimeout(delayDebouncer);
+  }, [searchBranchQuery]);
 
   useEffect(() => {
     fetchAllData();
@@ -166,30 +290,80 @@ export default function AdminRoutingPage() {
     setMatchedAsset(null);
 
     try {
+      const term = searchAssetQuery.trim();
+      const orClause = `"QR Code".ilike.%${term}%,"Serial#".ilike.%${term}%`;
+      console.log('Querying assets with orClause:', orClause);
       const { data, error } = await supabase
         .from('assets')
-        .eq('qr_code', searchAssetQuery.trim());
+        .select('*')
+        .or(orClause);
       
+      if (error) throw error;
+
       if (data && data.length > 0) {
         setMatchedAsset(data[0] as Asset);
       } else {
-        // Try serial number fallback
-        const { data: bySerial } = await supabase
-          .from('assets')
-          .eq('serial_number', searchAssetQuery.trim());
-        
-        if (bySerial && bySerial.length > 0) {
-          setMatchedAsset(bySerial[0] as Asset);
-        } else {
-          setAssetLookupError('No coffee machine asset matched that QR code or Serial Number.');
-        }
+        setAssetLookupError('No asset found matching that QR Code or Serial Number.');
       }
-    } catch (e) {
+    } catch (e: any) {
+      console.error('Asset Lookup Error:', e);
       setAssetLookupError('System error validating asset info.');
     }
   };
 
-  // Create service ticket
+  // Asset justification for ticket creation
+  const handleTicketAssetLookup = async () => {
+    const term = ticketAssetQuery.trim();
+    if (!term) return;
+    setTicketAssetLookupError(null);
+    setTicketMatchedAsset(null);
+    setTicketAssetLoading(true);
+
+    try {
+      const term = ticketAssetQuery.trim();
+      const orClause = `"QR Code".ilike.%${term}%,"Serial#".ilike.%${term}%`;
+      console.log('Querying assets with orClause:', orClause);
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .or(orClause);
+      
+      if (error) {
+        console.error('[Supabase Fetch Error - Ticket Asset Lookup]:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        const row = data[0];
+        const normalized: Asset = {
+          ...row,
+          id: row.id || row["Asset ID"] || row["Asset Code"] || `asset-${Math.random().toString(36).substr(2, 5)}`,
+          qr_code: row.qr_code || row["QR Code"] || '',
+          serial_number: row.serial_number || row["Serial Number"] || '',
+          name: row.name || row["Asset Name"] || row["Customer Name"] || 'Unknown Machine',
+          category: row.category || row["Category"] || 'Espresso Machine',
+          status: row.status || row["Status"] || 'active',
+          branch_id: row.branch_id || row["Branch ID"] || '',
+          last_serviced_at: row.last_serviced_at || row["Last Serviced At"] || new Date().toISOString().split('T')[0]
+        };
+        setTicketMatchedAsset(normalized);
+      } else {
+        setTicketAssetLookupError('No coffee machine asset matched that QR code or Serial Number.');
+      }
+    } catch (e: any) {
+      console.error('[handleTicketAssetLookup Critical Error]:', e);
+      setTicketAssetLookupError(`System error validating asset info: ${e.message || e}`);
+    } finally {
+      setTicketAssetLoading(false);
+    }
+  };
+
+  // Create service ticket and call log sequentially (Unified Workflow)
   const handleCreateTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBranchForTicket) return;
@@ -197,31 +371,56 @@ export default function AdminRoutingPage() {
     setCreatingTicket(true);
     setNotification(null);
 
+    const assignedTechId = ticketAssignedTechId || selectedTechId;
+
     const ticketPayload = {
-      id: `t-${Math.random().toString(36).substr(2, 9)}`,
-      customer_id: selectedBranchForTicket.id,
       customer_name: selectedBranchForTicket.name,
-      address: selectedBranchForTicket.address,
-      region: selectedBranchForTicket.region || region,
+      customer_address: selectedBranchForTicket.address,
+      machine_model: ticketMatchedAsset?.name || 'Unknown',
+      machine_serial_number: ticketMatchedAsset?.serial_number || 'N/A',
       issue_description: ticketIssue.trim(),
       status: 'open',
       priority: ticketPriority,
       created_at: new Date().toISOString()
     };
 
-    try {
-      const { error } = await supabase.from('tickets').insert(ticketPayload);
-      if (error) throw error;
+    const callPayload = {
+      ticket_id: '',
+      technician_id: assignedTechId,
+      scheduled_date: ticketScheduledDate, 
+      call_purpose: ticketIssue.trim(),
+      status: 'scheduled',
+      tech_type: 'road_tech',
+      asset_id: ticketMatchedAsset ? ticketMatchedAsset.id : null,
+      created_at: new Date().toISOString()
+    };
 
-      showNotice('success', `Live ticket generated for ${selectedBranchForTicket.name}!`);
+    try {
+      // 1. Insert into public.tickets
+      const { data: insertedTicket, error: ticketErr } = await supabase
+        .from('tickets')
+        .insert(ticketPayload)
+        .select('id')
+        .single();
+      if (ticketErr) throw ticketErr;
+
+      // 2. Insert into public.scheduled_call_logs
+      callPayload.ticket_id = insertedTicket.id;
+      const { error: callErr } = await supabase.from('scheduled_call_logs').insert(callPayload);
+      if (callErr) throw callErr;
+
+      showNotice('success', `Ticket & Scheduled Call logged sequentially for ${selectedBranchForTicket.name}!`);
       
       // Clear forms and refresh
       setTicketIssue('');
+      setTicketAssetQuery('');
+      setTicketMatchedAsset(null);
+      setTicketAssetLookupError(null);
       setSelectedBranchForTicket(null);
       await fetchAllData();
     } catch (err: any) {
       console.error(err);
-      showNotice('error', `Error inserting ticket: ${err.message}`);
+      showNotice('error', `Error inserting unified records: ${err.message}`);
     } finally {
       setCreatingTicket(false);
     }
@@ -236,16 +435,13 @@ export default function AdminRoutingPage() {
     setNotification(null);
 
     const callPayload = {
-      id: `sc-${Math.random().toString(36).substr(2, 9)}`,
       ticket_id: ticketToSchedule.id,
-      customer_id: ticketToSchedule.customer_id,
-      customer_name: ticketToSchedule.customer_name,
-      address: ticketToSchedule.address,
-      region: ticketToSchedule.region || region,
-      scheduled_date: scheduledDate, // YYYY-MM-DD
-      notes: scheduleNotes.trim() || `Urgent dispatch: ${ticketToSchedule.issue_description}`,
-      assigned_to: scheduleAssignee || selectedTechId,
-      status: 'pending',
+      technician_id: scheduleAssignee || selectedTechId,
+      scheduled_date: scheduledDate,
+      call_purpose: scheduleNotes.trim() || `Urgent dispatch: ${ticketToSchedule.issue_description}`,
+      status: 'scheduled',
+      tech_type: 'road_tech',
+      asset_id: ticketToSchedule.asset_id,
       created_at: new Date().toISOString()
     };
 
@@ -467,7 +663,9 @@ export default function AdminRoutingPage() {
     setTimeout(() => setNotification(null), 6000);
   };
 
-  const filteredBranches = branches;
+  const filteredBranches = searchBranchQuery.trim()
+    ? branches
+    : branches.filter(b => b.region.toLowerCase() === region.toLowerCase());
 
   const resolveTechName = (techId?: string) => {
     if (!techId) return 'Unassigned';
@@ -612,33 +810,60 @@ export default function AdminRoutingPage() {
 
               {/* Matched Customer Results directory */}
               <div className="max-h-60 overflow-y-auto space-y-2 pr-1 text-xs">
-                {filteredBranches.map(branch => (
-                  <div 
-                    key={branch.id} 
-                    className={`p-3 rounded-2xl border transition-all flex justify-between items-center gap-3 ${
-                      selectedBranchForTicket?.id === branch.id
-                        ? 'bg-amber-50 border-amber-300'
-                        : 'bg-slate-50/40 border-slate-100 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <p className="font-bold text-slate-800 flex items-center gap-1.5 leading-snug">
-                        <MapPin className="h-3 w-3 text-amber-500" /> {branch.name}
-                      </p>
-                      <p className="text-[10px] text-slate-500 pl-4 truncate max-w-xs">{branch.address}</p>
-                    </div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => setSelectedBranchForTicket(branch)}
-                      className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-amber-500 rounded-lg text-[9px] font-bold uppercase tracking-wider shrink-0 cursor-pointer"
-                    >
-                      Select
-                    </button>
+                {searchingCustomers && (
+                  <div className="flex items-center justify-center gap-2 py-6 text-slate-500 font-medium">
+                    <span className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-amber-500 animate-spin"></span>
+                    <span>Searching multi-table records...</span>
                   </div>
-                ))}
-                {filteredBranches.length === 0 && (
-                  <p className="text-center py-6 text-slate-400 text-xs">No client branches matched current active query.</p>
+                )}
+                
+                {!searchingCustomers && filteredBranches.map((branch, index) => {
+                  const customerName = branch["Customer Name"] || branch.name;
+                  const accCode = branch["A/C Code"] || branch.id;
+                  const displayAddress = branch["Current Location"] || branch.address;
+                  return (
+                    <div 
+                      key={`${branch.region}-${branch.id}-${index}`} 
+                      className={`p-3 rounded-2xl border transition-all flex justify-between items-center gap-3 ${
+                        selectedBranchForTicket?.id === branch.id
+                          ? 'bg-amber-50 border-amber-300'
+                          : 'bg-slate-50/40 border-slate-100 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-800 flex items-center gap-1.5 leading-snug truncate">
+                          <MapPin className="h-3 w-3 text-amber-500 shrink-0" /> {customerName}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1 pl-4.5">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-mono text-[8px] font-bold tracking-wider shrink-0">
+                            AC: {accCode}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[8px] font-bold uppercase tracking-wider shrink-0">
+                            {branch.region}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 pl-4.5 mt-1 truncate">{displayAddress}</p>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBranchForTicket(branch)}
+                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-amber-500 rounded-lg text-[9px] font-bold uppercase tracking-wider shrink-0 cursor-pointer"
+                      >
+                        Select
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {!searchingCustomers && filteredBranches.length === 0 && (
+                  <div className="text-center py-8 text-slate-500 bg-slate-50/50 rounded-2xl p-4 border border-dashed border-slate-200">
+                    <AlertCircle className="h-6 w-6 text-slate-400 mx-auto mb-2 animate-bounce" />
+                    <p className="font-semibold text-slate-700 text-xs">No matches found across KZN, JHB, or CPT databases.</p>
+                    <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                      Please verify the spelling or check if the databases have been populated. Check control console for database connection errors if failure persists.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -648,14 +873,19 @@ export default function AdminRoutingPage() {
               <form onSubmit={handleCreateTicketSubmit} className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4 animate-fade-in">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono text-[9px] font-bold uppercase">
-                      New Ticket Draft
+                    <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 font-mono text-[9px] font-bold uppercase border border-amber-100">
+                      Unified Ticket & Scheduled Call
                     </span>
-                    <h3 className="font-bold text-slate-800 text-sm mt-1">Issue Reporting details</h3>
+                    <h3 className="font-bold text-slate-800 text-sm mt-1">Issue & Logistics Dispatch</h3>
                   </div>
                   <button 
                     type="button" 
-                    onClick={() => setSelectedBranchForTicket(null)} 
+                    onClick={() => {
+                      setSelectedBranchForTicket(null);
+                      setTicketMatchedAsset(null);
+                      setTicketAssetQuery('');
+                      setTicketAssetLookupError(null);
+                    }} 
                     className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 cursor-pointer"
                   >
                     <X className="h-4 w-4" />
@@ -668,6 +898,7 @@ export default function AdminRoutingPage() {
                   <p className="text-[9px] text-indigo-700 font-bold uppercase mt-1">Validated ID: {selectedBranchForTicket.id} | Region: {selectedBranchForTicket.region || region}</p>
                 </div>
 
+                {/* Technical Description */}
                 <div className="space-y-1.5 text-xs">
                   <label className="block text-[10px] uppercase font-bold text-slate-500 pl-1">
                     Describe Technical Issue *
@@ -682,7 +913,89 @@ export default function AdminRoutingPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                {/* Live Asset Verification Group */}
+                <div className="space-y-1.5 text-xs border-y border-slate-100 py-3 my-2">
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 pl-1">
+                    Live Asset Verification (QR Code or Serial#) *
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-12">
+                      <QrCode className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Scan or enter QR Code / Serial#..."
+                        value={ticketAssetQuery}
+                        onChange={(e) => setTicketAssetQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:border-amber-500 font-mono"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTicketAssetLookup}
+                      disabled={ticketAssetLoading || !ticketAssetQuery.trim()}
+                      className="px-3 py-1 bg-slate-900 text-amber-500 rounded-xl text-[11px] font-bold uppercase tracking-wider hover:bg-slate-800 cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {ticketAssetLoading ? 'Searching...' : 'Search'}
+                    </button>
+                  </div>
+
+                  {ticketMatchedAsset && (
+                    <div className="mt-2 p-3 bg-emerald-50/65 border border-emerald-100 rounded-2xl space-y-1 animate-fade-in text-[11px]">
+                      <p className="font-bold text-emerald-800 text-xs flex items-center gap-1">
+                        <CheckCircle className="h-3.5 w-3.5" /> Validated Coffee Machine Found
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-emerald-700 font-medium">
+                        <div><span className="text-slate-400">Name:</span> {ticketMatchedAsset.name}</div>
+                        <div><span className="text-slate-400">Model:</span> {ticketMatchedAsset.category}</div>
+                        <div><span className="text-slate-400">S/N:</span> {ticketMatchedAsset.serial_number}</div>
+                        <div><span className="text-slate-400">QR:</span> {ticketMatchedAsset.qr_code}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {ticketAssetLookupError && (
+                    <div className="mt-2 p-2.5 bg-rose-50/60 border border-rose-100 rounded-xl text-[10px] text-rose-700 flex items-center gap-2 animate-fade-in">
+                      <AlertCircle className="h-4 w-4 text-rose-550 shrink-0" />
+                      <span>{ticketAssetLookupError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Call Scheduling Setup */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 pl-1 mb-1">
+                      Assign Technician *
+                    </label>
+                    <select
+                      value={ticketAssignedTechId}
+                      onChange={(e) => setTicketAssignedTechId(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+                      required
+                    >
+                      <option value="">-- Select Technician --</option>
+                      {technicians.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 pl-1 mb-1">
+                      Scheduled Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={ticketScheduledDate}
+                      onChange={(e) => setTicketScheduledDate(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                {/* Priority & Submission */}
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2">
                   <div>
                     <label className="block text-[10px] uppercase font-bold text-slate-500 pl-1 mb-1">
                       Priority Level
@@ -701,12 +1014,12 @@ export default function AdminRoutingPage() {
                   <div className="flex items-end">
                     <button
                       type="submit"
-                      disabled={creatingTicket || !ticketIssue.trim()}
-                      className="w-full py-2 bg-slate-900 text-amber-500 font-bold hover:bg-slate-800 rounded-xl uppercase tracking-wider text-[10px] cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                      disabled={creatingTicket || !ticketIssue.trim() || !ticketMatchedAsset}
+                      className="w-full py-2 bg-slate-900 text-amber-500 font-bold hover:bg-slate-800 rounded-xl uppercase tracking-wider text-[10px] cursor-pointer flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       id="save-live-ticket"
                     >
                       <PlusCircle className="h-3.5 w-3.5" />
-                      {creatingTicket ? 'Inserting...' : 'Insert Live Ticket'}
+                      {creatingTicket ? 'Scheduling...' : 'Schedule Ticket Visit'}
                     </button>
                   </div>
                 </div>
@@ -1012,16 +1325,34 @@ export default function AdminRoutingPage() {
               </div>
 
               <div className="max-h-72 overflow-y-auto space-y-2 pr-1 text-xs">
-                {filteredBranches.map(branch => {
-                  const StopIsDrafted = compiledStops.some(s => s.customer_name === branch.name);
+                {searchingCustomers && (
+                  <div className="flex items-center justify-center gap-2 py-6 text-slate-500 font-medium font-mono">
+                    <span className="h-4 w-4 rounded-full border-2 border-slate-305 border-t-amber-550 animate-spin"></span>
+                    <span>Searching multi-table records...</span>
+                  </div>
+                )}
+
+                {!searchingCustomers && filteredBranches.map((branch, index) => {
+                  const customerName = branch["Customer Name"] || branch.name;
+                  const displayAddress = branch["Current Location"] || branch.address;
+                  const accCode = branch["A/C Code"] || branch.id;
+                  const StopIsDrafted = compiledStops.some(s => s.customer_name === customerName);
                   return (
                     <div 
-                      key={branch.id} 
+                      key={`compile-branch-${branch.region}-${branch.id}-${index}`} 
                       className="p-3 bg-slate-50/40 border border-slate-100 rounded-2xl flex justify-between items-center gap-3 hover:bg-slate-50"
                     >
-                      <div>
-                        <p className="font-bold text-slate-800 leading-snug">{branch.name}</p>
-                        <p className="text-[10px] text-slate-500 truncate max-w-xs">{branch.address}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-800 leading-snug truncate">{customerName}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-mono text-[8px] font-bold tracking-wider shrink-0">
+                            AC: {accCode}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[8px] font-bold uppercase tracking-wider shrink-0">
+                            {branch.region}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 truncate mt-1">{displayAddress}</p>
                       </div>
                       <button
                         type="button"
@@ -1038,6 +1369,16 @@ export default function AdminRoutingPage() {
                     </div>
                   );
                 })}
+
+                {!searchingCustomers && filteredBranches.length === 0 && (
+                  <div className="text-center py-8 text-slate-500 bg-slate-50/50 rounded-2xl p-4 border border-dashed border-slate-200">
+                    <AlertCircle className="h-6 w-6 text-slate-400 mx-auto mb-2 animate-bounce" />
+                    <p className="font-semibold text-slate-700 text-xs">No matches found across KZN, JHB, or CPT databases.</p>
+                    <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                      Please verify the spelling or check if the databases have been populated. Check control console for database connection errors if failure persists.
+                    </p>
+                  </div>
+                )}
               </div>
 
             </div>

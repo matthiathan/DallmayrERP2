@@ -205,8 +205,47 @@ class MockQueryBuilder {
     return this;
   }
 
+  ilike(column: string, pattern: string) {
+    this.filters.push((item) => {
+      const val = (item[column] || '').toString().toLowerCase();
+      const term = pattern.replace(/%/g, '').toLowerCase();
+      return val.includes(term);
+    });
+    return this;
+  }
+
   in(column: string, values: any[]) {
     this.filters.push((item) => values.includes(item[column]));
+    return this;
+  }
+
+  limit(count: number) {
+    this.filters.push((item) => true); // Limit handled at resolution if needed or just chainable
+    return this;
+  }
+
+  or(filtersString: string) {
+    // In Mock, just parse standard properties of name, address and spaced equivalents
+    // filtersString resembles: '"Customer Name".ilike.%search%,"A/C Code".ilike.%search%'
+    // or 'name.ilike.%search%,address.ilike.%search%'
+    const match = filtersString.match(/ilike\.%([^%]+)%/);
+    const term = match ? match[1].toLowerCase() : '';
+    if (term) {
+      this.filters.push((item) => {
+        const nameVal = (item.name || item["Customer Name"] || '').toLowerCase();
+        const codeVal = (item.id || item["A/C Code"] || '').toLowerCase();
+        const addrVal = (item.address || item["Current Location"] || '').toLowerCase();
+        const qrVal = (item.qr_code || item["QR Code"] || '').toLowerCase();
+        const snVal = (item.serial_number || item["Serial Number"] || '').toLowerCase();
+        return (
+          nameVal.includes(term) ||
+          codeVal.includes(term) ||
+          addrVal.includes(term) ||
+          qrVal.includes(term) ||
+          snVal.includes(term)
+        );
+      });
+    }
     return this;
   }
 
